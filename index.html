@@ -461,6 +461,16 @@ input[type="text"]:focus, input[type="password"]:focus, select:focus{ border-col
       </div>
     </div>
 
+    <!-- Nome da assinatura (ajuda a IA em assinaturas difíceis de ler) -->
+    <div class="card" id="signatureNameCard">
+      <p class="section-title">Modo IA — nome da assinatura (opcional)</p>
+      <div class="field" style="margin-bottom:0;">
+        <label for="signatureNameInput">Nome completo de quem assinou</label>
+        <input type="text" id="signatureNameInput" placeholder="Ex.: Elivan Amaral de Souza">
+        <p class="hint">Preencha quando a assinatura estiver difícil de ler. A IA usa o nome apenas como referência para não confundir letras — continua sendo instruída a manter fidelidade ao traçado da imagem enviada, sem redesenhar a assinatura do zero.</p>
+      </div>
+    </div>
+
     <!-- Ações -->
     <div class="card actions">
       <button class="btn btn-primary" id="processBtn">✨ Processar e melhorar assinatura</button>
@@ -499,9 +509,12 @@ input[type="text"]:focus, input[type="password"]:focus, select:focus{ border-col
     </div>
 
     <div class="field">
-      <label for="modelInput">Modelo de imagem</label>
-      <input type="text" id="modelInput" placeholder="gpt-image-2">
-      <p class="hint">Padrão: <code>gpt-image-2</code>. Altere manualmente se a OpenAI lançar um novo modelo.</p>
+      <label for="modelSelect">Modelo de imagem</label>
+      <select id="modelSelect">
+        <option value="gpt-image-2.5-flare">gpt-image-2.5-flare — mais rápido (mesmo preço)</option>
+        <option value="gpt-image-2.5-sunburst">gpt-image-2.5-sunburst — melhor preservação de detalhes</option>
+      </select>
+      <p class="hint">O <code>gpt-image-1</code> está sendo desativado pela OpenAI em 23/10/2026. Use <strong>Flare</strong> para respostas mais rápidas no dia a dia, ou <strong>Sunburst</strong> quando a fidelidade dos traços da assinatura for mais importante que a velocidade.</p>
     </div>
 
     <div class="field">
@@ -559,7 +572,7 @@ const CONFIG_STORAGE_KEY = 'assinaturaProcessorConfig_v1';
 
 const defaultConfig = {
   apiKey: '',
-  model: 'gpt-image-2',
+  model: 'gpt-image-2.5-sunburst',
   quality: 'medium',
   mode: 'local'
 };
@@ -585,7 +598,7 @@ let appConfig = loadConfig();
 const settingsModal = document.getElementById('settingsModal');
 const apiKeyInput = document.getElementById('apiKeyInput');
 const toggleKeyVisibility = document.getElementById('toggleKeyVisibility');
-const modelInput = document.getElementById('modelInput');
+const modelSelect = document.getElementById('modelSelect');
 const qualitySelect = document.getElementById('qualitySelect');
 const modeRadioGroup = document.getElementById('modeRadioGroup');
 const modeBadge = document.getElementById('modeBadge');
@@ -595,7 +608,8 @@ function populateSettingsForm(){
   apiKeyInput.value = appConfig.apiKey || '';
   apiKeyInput.type = 'password';
   toggleKeyVisibility.textContent = '👁️';
-  modelInput.value = appConfig.model || defaultConfig.model;
+  const validModels = ['gpt-image-2.5-flare', 'gpt-image-2.5-sunburst'];
+  modelSelect.value = validModels.includes(appConfig.model) ? appConfig.model : defaultConfig.model;
   qualitySelect.value = appConfig.quality || defaultConfig.quality;
   document.querySelectorAll('#modeRadioGroup input[type="radio"]').forEach(r => {
     r.checked = (r.value === appConfig.mode);
@@ -604,14 +618,17 @@ function populateSettingsForm(){
 }
 
 function updateModeBadge(){
+  const signatureNameCard = document.getElementById('signatureNameCard');
   if(appConfig.mode === 'ia'){
     modeBadge.classList.remove('local');
     modeBadge.classList.add('ia');
     modeBadgeText.textContent = 'Modo: IA OpenAI (' + (appConfig.model || defaultConfig.model) + ')';
+    if(signatureNameCard) signatureNameCard.hidden = false;
   }else{
     modeBadge.classList.remove('ia');
     modeBadge.classList.add('local');
     modeBadgeText.textContent = 'Modo: Processamento Local';
+    if(signatureNameCard) signatureNameCard.hidden = true;
   }
 }
 
@@ -648,7 +665,7 @@ document.getElementById('saveSettingsBtn').addEventListener('click', () => {
   const selectedMode = document.querySelector('#modeRadioGroup input[name="mode"]:checked');
   appConfig = {
     apiKey: apiKeyInput.value.trim(),
-    model: (modelInput.value.trim() || defaultConfig.model),
+    model: modelSelect.value,
     quality: qualitySelect.value,
     mode: selectedMode ? selectedMode.value : 'local'
   };
@@ -1039,6 +1056,7 @@ document.getElementById('restoreBtn').addEventListener('click', () => {
 document.getElementById('clearBtn').addEventListener('click', () => {
   baseImageData = null;
   fileInput.value = '';
+  document.getElementById('signatureNameInput').value = '';
   originalCtx.clearRect(0, 0, originalCanvas.width, originalCanvas.height);
   workingCtx.clearRect(0, 0, workingCanvas.width, workingCanvas.height);
   workspace.hidden = true;
@@ -1079,7 +1097,7 @@ document.getElementById('copyBtn').addEventListener('click', async () => {
    INTEGRAÇÃO COM API — OpenAI Images (edição de imagem)
    ========================================================================== */
 
-const OPENAI_PROMPT = "Analise esta imagem de uma assinatura manuscrita. Remova completamente o fundo, papéis, sombras, manchas e elementos que não fazem parte da assinatura. Preserve fielmente todos os traços, curvas, proporções e características originais da assinatura. Melhore a nitidez e definição sem redesenhar ou inventar novos traços. Mantenha uma aparência natural de caligrafia manuscrita. Gere o resultado final como uma imagem PNG com fundo totalmente transparente. A assinatura deve ficar isolada, limpa e em alta qualidade, preferencialmente com traços pretos ou muito escuros.";
+const OPENAI_PROMPT = "Analise esta imagem de uma assinatura manuscrita. Remova completamente o fundo, papéis, sombras, manchas e elementos que não fazem parte da assinatura — isso inclui qualquer linha reta de assinatura do formulário/documento (a linha impressa ou guia sobre a qual a pessoa assinou), bordas, carimbos, textos impressos e quaisquer outras marcas que não sejam o traço manuscrito da própria assinatura. Preserve fielmente apenas os traços, curvas, proporções e características originais da assinatura manuscrita. Melhore a nitidez e definição sem redesenhar ou inventar novos traços. Mantenha uma aparência natural de caligrafia manuscrita. Gere o resultado final como uma imagem PNG com fundo totalmente transparente. A assinatura deve ficar isolada, limpa e em alta qualidade, preferencialmente com traços pretos ou muito escuros, sem nenhuma linha reta, sublinhado de formulário ou elemento gráfico que não faça parte da caligrafia.";
 
 // Gera um Blob PNG a partir do canvas original, redimensionando se necessário para reduzir custo/tempo
 function getOriginalImageBlobForAPI(){
@@ -1114,10 +1132,16 @@ async function processWithOpenAI(){
     const blob = await getOriginalImageBlobForAPI();
     if(!blob) throw new Error('Não foi possível preparar a imagem para envio.');
 
+    const signatureName = document.getElementById('signatureNameInput').value.trim();
+    let prompt = OPENAI_PROMPT;
+    if(signatureName){
+      prompt += ` O nome completo de quem assinou é "${signatureName}". Use este nome apenas como referência para identificar corretamente as letras em trechos ambíguos ou de difícil leitura — não altere o estilo, o traçado, as proporções ou a inclinação originais da assinatura, e não redesenhe partes que já estão legíveis na imagem enviada. Continue sendo 100% fiel ao traçado manuscrito da imagem original.`;
+    }
+
     const formData = new FormData();
     formData.append('model', appConfig.model || defaultConfig.model);
     formData.append('image', blob, 'assinatura.png');
-    formData.append('prompt', OPENAI_PROMPT);
+    formData.append('prompt', prompt);
     formData.append('n', '1');
     formData.append('size', 'auto');
     formData.append('quality', appConfig.quality || defaultConfig.quality);
